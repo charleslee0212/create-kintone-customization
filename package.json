@@ -1,0 +1,26 @@
+{
+  "type": "module",
+  "name": "create-kintone-customization",
+  "version": "1.0.0",
+  "description": "npx kintone env executable tool",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:dev": "tsc --watch"
+  },
+  "bin": {
+    "create-kintone-customization": "./dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^22.15.18",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@kintone/rest-api-client": "^5.7.2",
+    "inquirer": "^12.6.1",
+    "ora": "^8.2.0"
+  }
+}
