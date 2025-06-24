@@ -38,6 +38,7 @@ export const eventCategories = {
     'app.record.index.edit.show',
     'app.record.index.edit.submit',
     'app.record.index.edit.submit.success',
+    'app.record.index.delete.submit',
     'app.record.detail.show',
     'app.record.detail.delete.submit',
     'app.record.detail.process.proceed',

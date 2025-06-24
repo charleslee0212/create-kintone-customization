@@ -6,6 +6,7 @@ import path from 'path';
 import { excludeTypes, kintoneEvents, eventCategories } from './constants.js';
 import convertToFieldType from './convertToFieldType.js';
 import { getEventType } from './getEventType.js';
+import { spawn } from 'child_process';
 
 // kintone types
 type AppsType = Awaited<
@@ -432,10 +433,62 @@ const createEventType: (
   return typeDefs;
 };
 
-const createPackage: (dir: string, projectName: string) => void = async (
-  dir,
-  projectName
-) => {
+const createKintoneAppInfo: (
+  app: { appId: string; appName: string },
+  appProperties: PropertiesType
+) => string = (app, appProperties) => {
+  const fields: string[] = [];
+  const subTables: string[] = [];
+  const fieldLabels: string[] = [];
+  for (const [fieldCode, fieldData] of Object.entries(appProperties)) {
+    const tableLabels: string[] = [];
+    const label = fieldData.label
+      ? fieldData.label.replace(/[^a-zA-Z0-9]/g, '')
+      : '';
+    fieldLabels.push(label);
+    if (fieldData.type === 'SUBTABLE') {
+      subTables.push(
+        `${label || fieldCode}: {` +
+          `\n\t\t\t\tfieldCode: '${fieldCode}',` +
+          `\n\t\t\t\tfields: {\n\t\t\t\t\t${Object.entries(fieldData.fields)
+            .map(([tFieldCode, tFieldData]) => {
+              const tableLabel = tFieldData.label
+                ? `${tFieldData.label.replace(/[^a-zA-Z0-9]/g, '')}`
+                : '';
+              tableLabels.push(tableLabel);
+              const tlCount = tableLabels.filter(
+                (l) => l === tableLabel
+              ).length;
+              return `${
+                tableLabel
+                  ? `${tableLabel}${tlCount > 1 ? `_${tlCount - 2}` : ''}`
+                  : tFieldCode
+              }: '${tFieldCode}'`;
+            })
+            .join(',\n\t\t\t\t\t')}\n\t\t\t\t}\n\t\t\t},`
+      );
+      continue;
+    }
+    const count = fieldLabels.filter((l) => l === label).length;
+    fields.push(
+      `${
+        label ? `${label}${count > 1 ? `_${count - 2}` : ''}` : fieldCode
+      }: '${fieldCode}',`
+    );
+  }
+  return `\t${app.appName.replace(/[^a-zA-Z0-9]/g, '')}: {\n\t\tappId: ${
+    app.appId
+  },\n\t\tfields: {\n\t\t\t${fields.join('\n\t\t\t')}\n\t\t},${
+    subTables.length
+      ? `\n\t\tsubtables: {\n\t\t\t${subTables.join('\n\t\t\t')}\n\t\t},`
+      : ''
+  }\n\t},`;
+};
+
+const createPackage: (
+  dir: string,
+  projectName: string
+) => Promise<void> = async (dir, projectName) => {
   const packageJson = {
     name: projectName,
     version: '1.0.0',
@@ -470,9 +523,9 @@ const createWebpack: (
   }
 module.exports = {
   entry: {
-    ${selectedApp.appName}: './${selectedApp.appName}/${
-    language[0] === 'T' ? 'ts' : 'js'
-  }/main.${
+    ${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')}: './${
+    selectedApp.appName
+  }/${language[0] === 'T' ? 'ts' : 'js'}/main.${
     language[0] === 'T' ? (react ? 'tsx' : 'ts') : react ? 'jsx' : 'js'
   }',
   },
@@ -541,6 +594,39 @@ module.exports = {
   fs.writeFileSync(path.join(dir, 'webpack.config.js'), webpack);
 };
 
+const createTsconfig: (dir: string) => void = (dir) => {
+  const tsconfig = `{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "strict": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "files" : [
+    "./node_modules/@kintone/dts-gen/kintone.d.ts",
+  ],
+  "include": ["./**/*"],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
+}`;
+  fs.writeFileSync(path.join(dir, 'tsconfig.json'), tsconfig);
+};
+
 const creategitignore: (dir: string) => void = (dir) => {
   const gitignore = '.DS_Store' + '\nnode_modules' + '\ndist';
   fs.writeFileSync(path.join(dir, '.gitignore'), gitignore);
@@ -568,7 +654,7 @@ const createDir: (
   const srcPath = path.join(dir, 'src');
   fs.mkdirSync(srcPath, { recursive: true });
 
-  const cssPath = path.join(dir, 'css');
+  const cssPath = path.join(srcPath, 'css');
   fs.mkdirSync(cssPath, { recursive: true });
 
   const commonPath = path.join(dir, 'common');
@@ -584,24 +670,56 @@ const createDir: (
     }`
   );
 
-  const codeFile = `import { KintoneRestAPIClient } from '@kintone/rest-api-client';
-import { KintoneEvent } from './lib/types';
+  const tracker = new Set<string>();
+
+  const kintoneEvents = events.map((event) => {
+    let kintoneEvent = `kintone.events.on('${event}', (event`;
+    if (language[0] === 'T') {
+      if (eventCategories.list.includes(event)) {
+        tracker.add('ListShowEvent');
+        return kintoneEvent + ': ' + 'ListShowEvent' + ') => {\n\n\t});';
+      }
+      if (eventCategories.record.includes(event)) {
+        tracker.add('DefaultRecordEvent');
+        return kintoneEvent + ': ' + 'DefaultRecordEvent' + ') => {\n\n\t});';
+      }
+      if (eventCategories.create.includes(event)) {
+        tracker.add('CreateRecordEvent');
+        return kintoneEvent + ': ' + 'CreateRecordEvent' + ') => {\n\n\t});';
+      }
+      if (eventCategories.createShow.includes(event)) {
+        tracker.add('CreateShowRecordEvent');
+        return (
+          kintoneEvent + ': ' + 'CreateShowRecordEvent' + ') => {\n\n\t});'
+        );
+      }
+      if (eventCategories.report.includes(event)) {
+        tracker.add('ReportEvent');
+        return kintoneEvent + ': ' + 'ReportEvent' + ') => {\n\n\t});';
+      }
+      if (eventCategories.portal.includes(event)) {
+        tracker.add('PortalEvent');
+        return kintoneEvent + ': ' + 'PortalEvent' + ') => {\n\n\t});';
+      }
+      if (eventCategories.spacePortal.includes(event)) {
+        tracker.add('SpacePortalEvent');
+        return kintoneEvent + ': ' + 'SpacePortalEvent' + ') => {\n\n\t});';
+      }
+    }
+    return kintoneEvent + ') => {\n\n\t});';
+  });
+
+  const codeFile = `import { KintoneRestAPIClient } from '@kintone/rest-api-client';${
+    language[0] === 'T'
+      ? `\nimport { ${[...tracker].join(', ')} } from './lib/types';`
+      : ''
+  }
 
 const client = new KintoneRestAPIClient();
 
 (() => {
 
-  kintone.events.on('app.record.index.show', (event${
-    language[0] ? ': KintoneEvent' : ''
-  }) => {
-
-  });
-
-  kintone.events.on('mobile.app.record.index.show', (event${
-    language[0] ? ': KintoneEvent' : ''
-  }) => {
-
-  });
+  ${kintoneEvents.join('\n\n\t')}
 
 })();`;
   fs.writeFileSync(codeFilePath, codeFile);
@@ -609,25 +727,221 @@ const client = new KintoneRestAPIClient();
   const libPath = path.join(codePath, 'lib');
   fs.mkdirSync(libPath, { recursive: true });
 
-  const typeFilePath = path.join(libPath, `type.ts`);
-  const typeFile = `import { KintoneRecordField } from '@kintone/rest-api-client';
+  const constantFilePath = path.join(
+    commonPath,
+    `constant.${language[0] === 'T' ? 'ts' : 'js'}`
+  );
+
+  if (language[0] === 'T') {
+    const typeFilePath = path.join(libPath, 'types.ts');
+    const typeFile = `import { KintoneRecordField } from '@kintone/rest-api-client';
 ${
-  `export type ${selectedApp.appName.replaceAll('_', '')} = ` +
+  `export type ${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')} = ` +
   createType(selectedAppProperties, false)
 }${
+      relatedApps.length
+        ? '\n' +
+          relatedApps
+            .map(
+              (app, i) =>
+                `export type ${app.appName.replace(/[^a-zA-Z0-9]/g, '')} = ` +
+                createType(relatedAppsProperties[i], false)
+            )
+            .join('\n')
+        : ''
+    }${createEventType(events, selectedAppProperties)}
+`;
+    fs.writeFileSync(typeFilePath, typeFile);
+  }
+
+  const constantFile = `export const kintoneAppsInfo = {\n${createKintoneAppInfo(
+    selectedApp,
+    selectedAppProperties
+  )}${
     relatedApps.length
       ? '\n' +
         relatedApps
-          .map(
-            (app, i) =>
-              `export type ${app.appName.replaceAll('_', '')} = ` +
-              createType(relatedAppsProperties[i], false)
-          )
+          .map((app, i) => createKintoneAppInfo(app, relatedAppsProperties[i]))
           .join('\n')
       : ''
-  }${createEventType(events, selectedAppProperties)}
-`;
-  fs.writeFileSync(typeFilePath, typeFile);
+  }\n}`;
+
+  fs.writeFileSync(constantFilePath, constantFile);
+
+  if (react) {
+    const appFilePath = path.join(
+      codePath,
+      `App.${language[0] === 'T' ? 'tsx' : 'jsx'}`
+    );
+
+    const appFile = `import Example from "./components/Example";
+
+const App = () => {
+    return <Example/>
+};
+
+export default App;`;
+
+    fs.writeFileSync(appFilePath, appFile);
+
+    const componenetsPath = path.join(codePath, `components`);
+    fs.mkdirSync(componenetsPath, { recursive: true });
+
+    const exampleComponentFile = path.join(
+      componenetsPath,
+      `Example.${language[0] === 'T' ? 'tsx' : 'jsx'}`
+    );
+
+    const exampleComponent = `const Example = () => {
+    return <div>Hello World!</div>
+};
+
+export default Example;`;
+
+    fs.writeFileSync(exampleComponentFile, exampleComponent);
+  }
+};
+
+const runCommand: (
+  cmd: string,
+  args: string[],
+  dir: string
+) => Promise<void> = (cmd, args, dir) => {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: 'pipe', cwd: dir });
+
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else
+        reject(new Error(`${cmd} ${args.join(' ')} failed with code ${code}`));
+    });
+  });
+};
+
+const installDependencies: (
+  language: string,
+  react: boolean,
+  dir: string
+) => Promise<boolean> = async (language, react, dir) => {
+  // install core dependencies
+  const spinner_core = ora('Installing core dependencies...').start();
+  try {
+    await runCommand(
+      'npm',
+      [
+        'install',
+        '-D',
+        'webpack',
+        'webpack-cli',
+        'eslint',
+        '@cybozu/eslint-config',
+      ],
+      dir
+    );
+    spinner_core.succeed('Core dependencies installed.');
+  } catch (e) {
+    console.log(e);
+    spinner_core.fail('Core dependencies failed to install!');
+    return false;
+  }
+
+  // install babel dependencies
+  const spinner_babel = ora('Installing babel dependencies...').start();
+  try {
+    await runCommand(
+      'npm',
+      [
+        'install',
+        '-D',
+        'babel-loader',
+        '@babel/core',
+        '@babel/preset-env',
+        'core-js@3',
+      ],
+      dir
+    );
+    spinner_babel.succeed('Babel dependencies installed.');
+  } catch (e) {
+    console.log(e);
+    spinner_babel.fail('Babel dependencies failed to install!');
+    return false;
+  }
+  // install polyfill dependencies
+  const spinner_polyfill = ora('Installing polyfill dependencies...').start();
+  try {
+    await runCommand('npm', ['install', '@babel/polyfill'], dir);
+    spinner_polyfill.succeed('Polyfill dependencies installed.');
+  } catch (e) {
+    console.log(e);
+    spinner_polyfill.fail('Babel dependencies failed to install!');
+    return false;
+  }
+  // install kintone rest api
+  const spinner_kintone = ora('Installing kintone rest api...').start();
+  try {
+    await runCommand('npm', ['install', '@kintone/rest-api-client'], dir);
+    spinner_kintone.succeed('Kintone rest api installed');
+  } catch (e) {
+    console.log(e);
+    spinner_kintone.fail('Kintone rest api failed to install!');
+    return false;
+  }
+
+  if (react) {
+    // install react and react-dom
+    const spinner_react = ora('Installing react...').start();
+    try {
+      await runCommand('npm', ['install', 'react', 'react-dom'], dir);
+      await runCommand('npm', ['install', '-D', '@babel/preset-react'], dir);
+      spinner_react.succeed('React installed');
+    } catch (e) {
+      console.log(e);
+      spinner_react.fail('React failed to install!');
+      return false;
+    }
+  }
+
+  if (language[0] === 'T') {
+    // install typescript dependencies
+    const spinner_ts = ora('Installing typescript...').start();
+    try {
+      await runCommand(
+        'npm',
+        [
+          'install',
+          '-D',
+          'typescript',
+          '@babel/preset-typescript',
+          'fork-ts-checker-webpack-plugin',
+          '@babel/plugin-proposal-class-properties',
+          '@kintone/dts-gen',
+        ],
+        dir
+      );
+      spinner_ts.succeed('Typescript installed');
+    } catch (e) {
+      console.log(e);
+      spinner_ts.fail('Typescript failed to install!');
+      return false;
+    }
+    // install react dependencies
+    if (react) {
+      const spinner_treact = ora('Installing react types...').start();
+      try {
+        await runCommand(
+          'npm',
+          ['install', '-D', '@types/react', '@types/react-dom'],
+          dir
+        );
+        spinner_treact.succeed('React types installed');
+      } catch (e) {
+        console.log(e);
+        spinner_ts.fail('React types failed to install!');
+        return false;
+      }
+    }
+  }
+  return true;
 };
 
 export const generateKintoneEnv: (
@@ -639,7 +953,7 @@ export const generateKintoneEnv: (
   relatedAppsProperties: PropertiesType[],
   language: string,
   react: boolean
-) => void = (
+) => Promise<boolean> = async (
   projectName,
   events,
   selectedApp,
@@ -651,8 +965,11 @@ export const generateKintoneEnv: (
 ) => {
   const dir = path.join(process.cwd(), selectedApp.appName);
   fs.mkdirSync(dir, { recursive: true });
-  createPackage(dir, projectName);
+  await createPackage(dir, projectName);
   createWebpack(dir, selectedApp, language, react);
+  if (language[0] === 'T') {
+    createTsconfig(dir);
+  }
   creategitignore(dir);
   createDir(
     dir,
@@ -664,4 +981,8 @@ export const generateKintoneEnv: (
     relatedAppsProperties,
     events
   );
+  const installed = await installDependencies(language, react, dir);
+  if (!installed)
+    return Boolean(await runCommand('rm', ['-rf', dir], process.cwd()));
+  return true;
 };
