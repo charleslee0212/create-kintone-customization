@@ -16,7 +16,9 @@ export const getEventType: (
   viewType: string;
   viewId: number;
   viewName: string;
-  records: ${recordType.replaceAll('\n\t', '\n\t\t')}
+  records: ${recordType
+    .replaceAll('\n\t', '\n\t\t')
+    .replaceAll('\n};', '\n\t};')}
   offset: number;
   size: number;
   type: string;
@@ -25,21 +27,27 @@ export const getEventType: (
       return `export interface DefaultRecordEvent {
   appId: number;
   recordId: number;
-  record: ${recordType.replaceAll('\n\t', '\n\t\t')}
+  record: ${recordType
+    .replaceAll('\n\t', '\n\t\t')
+    .replaceAll('\n};', '\n\t};')}
   type: string;
 }`;
     case 'create':
       return `export interface CreateRecordEvent {
   appId: number;
   recordId: number;
-  record: ${recordType.replaceAll('\n\t', '\n\t\t')}
+  record: ${recordType
+    .replaceAll('\n\t', '\n\t\t')
+    .replaceAll('\n};', '\n\t};')}
   type: string;
 }`;
     case 'createShow':
       return `export interface CreateShowRecordEvent {
   appId: number;
   reuse: boolean;
-  record: ${recordType.replaceAll('\n\t', '\n\t\t')}
+  record: ${recordType
+    .replaceAll('\n\t', '\n\t\t')
+    .replaceAll('\n};', '\n\t};')}
   type: string;
 }`;
     case 'report':

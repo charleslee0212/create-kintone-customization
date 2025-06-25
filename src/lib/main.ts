@@ -1,5 +1,7 @@
 import { KintoneRestAPIClient } from '@kintone/rest-api-client';
 import {
+  createFieldCodeFile,
+  createFieldTypeFile,
   generateKintoneEnv,
   getAllApps,
   getAllFormFields,
@@ -14,15 +16,49 @@ import {
   propmtProjectName,
 } from './util.js';
 
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+
 export default async () => {
   const urlRegex = /^https:\/\/([a-zA-Z0-9-]+)\.kintone\.com$/;
-  const projectName = await propmtProjectName();
+
+  const argv = await yargs(hideBin(process.argv))
+    .option('tools', {
+      type: 'boolean',
+      alias: 't',
+      description: 'Enables tools mode',
+      default: false,
+    })
+    .option('add-app-fields', {
+      type: 'boolean',
+      description: 'Adds a file containing the field codes',
+      default: false,
+    })
+    .option('add-app-types', {
+      type: 'boolean',
+      description: 'Adds a file containing the field types',
+      default: false,
+    })
+    .check((argv) => {
+      if (argv.tools && !(argv['add-app-fields'] || argv['add-app-types'])) {
+        throw new Error(
+          '❌ When using the --tools flag, you must specify a tool:\n--add-app-fields\n--add-app-types'
+        );
+      }
+      if ((argv['add-app-fields'] || argv['add-app-types']) && !argv.tools) {
+        throw new Error('❌ The --tools flag is required when using a tool');
+      }
+      return true;
+    })
+    .help().argv;
+
+  const projectName = argv.tools ? '' : await propmtProjectName();
   const url = await promptUrl();
   const validUrl = urlRegex.test(url);
 
   if (!validUrl) {
-    return console.log(
-      'Invalid url! Please format the url as follows "https://example.kintone.com".'
+    console.error(
+      '❌ Invalid url! Please format the url as follows "https://example.kintone.com".'
     );
   }
 
@@ -39,12 +75,31 @@ export default async () => {
   const allApps = await getAllApps(client);
 
   if (!allApps)
-    return console.log('Unable to retrieve your apps! Check your credentials.');
+    return console.error(
+      'Unable to retrieve your apps! Check your credentials.'
+    );
 
   const selectedApp = await promptAppSelection(allApps);
-  const relatedApps = await promptRelatedApps(allApps, selectedApp);
-
   const selectedAppFormFields = await getFormFields(client, selectedApp);
+
+  if (argv.tools) {
+    if (argv['add-app-fields']) {
+      const language = await promptLanguage();
+      createFieldCodeFile(
+        process.cwd(),
+        selectedApp,
+        selectedAppFormFields,
+        language
+      );
+      return;
+    }
+    if (argv['add-app-types']) {
+      createFieldTypeFile(process.cwd(), selectedApp, selectedAppFormFields);
+      return;
+    }
+  }
+
+  const relatedApps = await promptRelatedApps(allApps, selectedApp);
   const relatedAppsFormFields = await getAllFormFields(client, relatedApps);
 
   const events = await promptEvents();

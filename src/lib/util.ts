@@ -347,22 +347,16 @@ const createType: (
   if (!createEvent) typeDef += header;
   for (const [fieldCode, fieldData] of Object.entries(appProperties)) {
     if (fieldData.type === 'SUBTABLE') {
-      typeDef += `\n\t${fieldCode}: {
-    type: 'SUBTABLE';
-    value: Array<{
-      id: string;
-      value: {
-        ${Object.entries(fieldData.fields)
-          .map(
-            ([tFieldCode, tFieldData]) =>
-              `${tFieldCode}: KintoneRecordField.${convertToFieldType(
-                tFieldData.type
-              )};`
-          )
-          .join('\n\t\t\t\t')}
-    }
-  }>;
-}`;
+      typeDef += `\n\t${fieldCode}: {\n\t\ttype: 'SUBTABLE';\n\t\tvalue: Array<{\n\t\t\tid: string;\n\t\t\tvalue: {\n\t\t\t\t${Object.entries(
+        fieldData.fields
+      )
+        .map(
+          ([tFieldCode, tFieldData]) =>
+            `${tFieldCode}: KintoneRecordField.${convertToFieldType(
+              tFieldData.type
+            )};`
+        )
+        .join('\n\t\t\t\t')}\n\t\t\t};\n\t\t}>;\n\t};`;
     }
     if (createEvent && excludeTypes.includes(fieldData.type)) continue;
     const fieldType = convertToFieldType(fieldData.type);
@@ -463,9 +457,9 @@ const createKintoneAppInfo: (
                 tableLabel
                   ? `${tableLabel}${tlCount > 1 ? `_${tlCount - 2}` : ''}`
                   : tFieldCode
-              }: '${tFieldCode}'`;
+              }: '${tFieldCode}',`;
             })
-            .join(',\n\t\t\t\t\t')}\n\t\t\t\t}\n\t\t\t},`
+            .join('\n\t\t\t\t\t')}\n\t\t\t\t},\n\t\t\t},`
       );
       continue;
     }
@@ -942,6 +936,42 @@ const installDependencies: (
     }
   }
   return true;
+};
+
+export const createFieldCodeFile: (
+  dir: string,
+  selectedApp: { appId: string; appName: string },
+  selectedAppProperties: PropertiesType,
+  language: string
+) => void = (dir, selectedApp, selectedAppProperties, language) => {
+  const pathToFile = path.join(
+    dir,
+    `${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')}_fields.${
+      language[0] === 'T' ? 'ts' : 'js'
+    }`
+  );
+  const constantFile = `export const kintoneAppsInfo = {\n${createKintoneAppInfo(
+    selectedApp,
+    selectedAppProperties
+  )}\n};`;
+  fs.writeFileSync(pathToFile, constantFile);
+};
+
+export const createFieldTypeFile: (
+  dir: string,
+  selectedApp: { appId: string; appName: string },
+  selectedAppProperties: PropertiesType
+) => void = (dir, selectedApp, selectedAppProperties) => {
+  const pathToFile = path.join(
+    dir,
+    `${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')}_types.ts`
+  );
+  const typeFile = `import { KintoneRecordField } from '@kintone/rest-api-client';
+${
+  `export type ${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')} = ` +
+  createType(selectedAppProperties, false)
+}`;
+  fs.writeFileSync(pathToFile, typeFile);
 };
 
 export const generateKintoneEnv: (

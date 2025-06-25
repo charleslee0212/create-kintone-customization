@@ -16,11 +16,13 @@
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^22.15.18",
+    "@types/yargs": "^17.0.33",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "@kintone/rest-api-client": "^5.7.2",
     "inquirer": "^12.6.1",
-    "ora": "^8.2.0"
+    "ora": "^8.2.0",
+    "yargs": "^18.0.0"
   }
 }
