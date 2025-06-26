@@ -21,6 +21,7 @@ import { hideBin } from 'yargs/helpers';
 
 export default async () => {
   const urlRegex = /^https:\/\/([a-zA-Z0-9-]+)\.kintone\.com$/;
+  const allowedFlags = ['tools', 'add-app-fields', 'add-app-types'];
 
   const argv = await yargs(hideBin(process.argv))
     .option('tools', {
@@ -40,6 +41,21 @@ export default async () => {
       default: false,
     })
     .check((argv) => {
+      if (argv._.length > 0) {
+        throw new Error(`Unexpected argument(s): ${argv._.join(', ')}`);
+      }
+
+      const providedFlags = Object.keys(argv).filter(
+        (key) => argv[key] && !['_', '$0'].includes(key)
+      );
+
+      const invalidFlags = providedFlags.filter(
+        (flag) => !allowedFlags.includes(flag)
+      );
+
+      if (invalidFlags.length > 0) {
+        throw new Error(`❌Invalid flags provided: ${invalidFlags.join(', ')}`);
+      }
       if (argv.tools && !(argv['add-app-fields'] || argv['add-app-types'])) {
         throw new Error(
           '❌ When using the --tools flag, you must specify a tool:\n--add-app-fields\n--add-app-types'
