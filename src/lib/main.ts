@@ -42,7 +42,7 @@ export default async () => {
     })
     .check((argv) => {
       if (argv._.length > 0) {
-        throw new Error(`Unexpected argument(s): ${argv._.join(', ')}`);
+        throw new Error(`❌ Unexpected argument(s): ${argv._.join(', ')}`);
       }
 
       const providedFlags = Object.keys(argv).filter(
@@ -54,7 +54,9 @@ export default async () => {
       );
 
       if (invalidFlags.length > 0) {
-        throw new Error(`❌Invalid flags provided: ${invalidFlags.join(', ')}`);
+        throw new Error(
+          `❌ Invalid flags provided: ${invalidFlags.join(', ')}`
+        );
       }
       if (argv.tools && !(argv['add-app-fields'] || argv['add-app-types'])) {
         throw new Error(
