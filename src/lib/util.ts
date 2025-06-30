@@ -829,6 +829,8 @@ const installDependencies: (
         'webpack-cli',
         'eslint',
         '@cybozu/eslint-config',
+        'style-loader',
+        'css-loader',
       ],
       dir
     );
