@@ -517,9 +517,9 @@ const createWebpack: (
   }
 module.exports = {
   entry: {
-    ${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')}: './${
-    selectedApp.appName
-  }/${language[0] === 'T' ? 'ts' : 'js'}/main.${
+    ${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')}: './src/${
+    language[0] === 'T' ? 'ts' : 'js'
+  }/main.${
     language[0] === 'T' ? (react ? 'tsx' : 'ts') : react ? 'jsx' : 'js'
   }',
   },
