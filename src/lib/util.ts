@@ -530,7 +530,8 @@ module.exports = {
   resolve: {
     alias: {
       modules: path.join(__dirname, 'node_modules'),
-      common: path.join(__dirname, 'common')
+      common: path.join(__dirname, 'common'),
+      '@': path.resolve(__dirname, './'),
     },
     extensions: ['.tsx', '.ts', '.js', '.jsx'],
   },${
