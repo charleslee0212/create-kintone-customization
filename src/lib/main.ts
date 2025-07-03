@@ -21,7 +21,14 @@ import { hideBin } from 'yargs/helpers';
 
 export default async () => {
   const urlRegex = /^https:\/\/([a-zA-Z0-9-]+)\.kintone\.com$/;
-  const allowedFlags = ['tools', 'add-app-fields', 'add-app-types'];
+  const allowedFlags = [
+    'tools',
+    't',
+    'add-app-fields',
+    'addAppFields',
+    'add-app-types',
+    'addAppTypes',
+  ];
 
   const argv = await yargs(hideBin(process.argv))
     .option('tools', {
