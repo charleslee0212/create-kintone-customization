@@ -82,7 +82,7 @@ export default async () => {
   const validUrl = urlRegex.test(url);
 
   if (!validUrl) {
-    console.error(
+    return console.error(
       '❌ Invalid url! Please format the url as follows "https://example.kintone.com".'
     );
   }
