@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "create-kintone-customization",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "npx kintone env executable tool",
   "main": "index.js",
   "scripts": {
