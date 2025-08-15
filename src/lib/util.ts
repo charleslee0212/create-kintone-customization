@@ -30,17 +30,33 @@ export const propmtProjectName: () => Promise<string> = async () => {
   return projectName;
 };
 
-export const promptUrl: () => Promise<string> = async () => {
+export const promptDomainType: () => Promise<
+  'kintone' | 'cybozu'
+> = async () => {
+  const { type } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'type',
+      message: 'Select domain type:',
+      choices: ['kintone', 'cybozu'],
+    },
+  ]);
+
+  return type;
+};
+
+export const promptUrl: (type: string) => Promise<string> = async (type) => {
   const { url } = await inquirer.prompt([
     {
       type: 'input',
       name: 'url',
-      message:
-        'Please enter your Kintone domain url (ex. https://example.kintone.com):',
+      message: `Please enter your ${
+        type[0].toUpperCase() + type.slice(1)
+      } subdomain name (ex. if your url is https://example.${type}.com enter example):`,
     },
   ]);
 
-  return url as string;
+  return `https://${url}.${type}.com`;
 };
 
 export const promptCredentials: () => Promise<[string, string]> = async () => {

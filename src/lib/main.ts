@@ -8,6 +8,7 @@ import {
   getFormFields,
   promptAppSelection,
   promptCredentials,
+  promptDomainType,
   promptEvents,
   promptLanguage,
   promptReact,
@@ -20,8 +21,13 @@ import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 
 export default async () => {
-  const urlRegex = /^https:\/\/([a-zA-Z0-9-]+)\.kintone\.com$/;
+  const urlRegex = /^https:\/\/([a-zA-Z0-9-]+)\.(?:kintone|cybozu)\.com$/;
   const allowedFlags = [
+    'url',
+    'username',
+    'u',
+    'password',
+    'p',
     'tools',
     't',
     'add-app-fields',
@@ -31,6 +37,23 @@ export default async () => {
   ];
 
   const argv = await yargs(hideBin(process.argv))
+    .option('url', {
+      type: 'string',
+      description: 'Kintone/Cybozu url',
+      default: '',
+    })
+    .option('username', {
+      type: 'string',
+      alias: 'u',
+      description: 'Username to the Kintone/Cybozu environment',
+      default: '',
+    })
+    .option('password', {
+      type: 'string',
+      alias: 'p',
+      description: 'Password to the Kintone/Cybozu environment',
+      default: '',
+    })
     .option('tools', {
       type: 'boolean',
       alias: 't',
@@ -73,21 +96,44 @@ export default async () => {
       if ((argv['add-app-fields'] || argv['add-app-types']) && !argv.tools) {
         throw new Error('❌ The --tools flag is required when using a tool');
       }
+
+      if (argv.url && !urlRegex.test(argv.url)) {
+        throw new Error(
+          '❌ Invalid url! Please format the url as follows "https://example.kintone.com" or "https://example.cybozu.com"'
+        );
+      }
+
+      if (!(!!argv.username === !!argv.password)) {
+        throw new Error(
+          '❌ Please provide both --username and --password when providing credentials'
+        );
+      }
+
       return true;
     })
     .help().argv;
 
   const projectName = argv.tools ? '' : await propmtProjectName();
-  const url = await promptUrl();
-  const validUrl = urlRegex.test(url);
 
-  if (!validUrl) {
-    return console.error(
-      '❌ Invalid url! Please format the url as follows "https://example.kintone.com".'
-    );
-  }
+  const url =
+    argv.url ||
+    (await (async () => {
+      const domainType = await promptDomainType();
+      const url = await promptUrl(domainType);
+      const validUrl = urlRegex.test(url);
+      if (!validUrl) {
+        console.error(
+          `❌ Invalid url! Please format the url as follows "https://example.${domainType}.com".`
+        );
+      }
+    })());
 
-  const [username, password] = await promptCredentials();
+  if (!url) return;
+
+  const [username, password] =
+    argv.username && argv.password
+      ? [argv.username, argv.password]
+      : await promptCredentials();
 
   const client = new KintoneRestAPIClient({
     baseUrl: url,
