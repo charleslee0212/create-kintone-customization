@@ -125,7 +125,9 @@ export default async () => {
         console.error(
           `❌ Invalid url! Please format the url as follows "https://example.${domainType}.com".`
         );
+        return;
       }
+      return url;
     })());
 
   if (!url) return;
