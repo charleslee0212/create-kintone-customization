@@ -443,6 +443,14 @@ const createEventType: (
   return typeDefs;
 };
 
+const stringify = (str: string) => {
+  if (!str) return '';
+  const raw = str.replace(/[^a-zA-Z0-9]/g, '');
+  const label = /^\d/.test(raw) ? `_${raw}` : raw;
+
+  return label;
+};
+
 const createKintoneAppInfo: (
   app: { appId: string; appName: string },
   appProperties: PropertiesType
@@ -452,9 +460,7 @@ const createKintoneAppInfo: (
   const fieldLabels: string[] = [];
   for (const [fieldCode, fieldData] of Object.entries(appProperties)) {
     const tableLabels: string[] = [];
-    const label = fieldData.label
-      ? fieldData.label.replace(/[^a-zA-Z0-9]/g, '')
-      : '';
+    const label = stringify(fieldData.label);
     fieldLabels.push(label);
     if (fieldData.type === 'SUBTABLE') {
       subTables.push(
@@ -462,9 +468,7 @@ const createKintoneAppInfo: (
           `\n\t\t\t\tfieldCode: '${fieldCode}',` +
           `\n\t\t\t\tfields: {\n\t\t\t\t\t${Object.entries(fieldData.fields)
             .map(([tFieldCode, tFieldData]) => {
-              const tableLabel = tFieldData.label
-                ? `${tFieldData.label.replace(/[^a-zA-Z0-9]/g, '')}`
-                : '';
+              const tableLabel = stringify(tFieldData.label);
               tableLabels.push(tableLabel);
               const tlCount = tableLabels.filter(
                 (l) => l === tableLabel
@@ -486,7 +490,8 @@ const createKintoneAppInfo: (
       }: '${fieldCode}',`
     );
   }
-  return `\t${app.appName.replace(/[^a-zA-Z0-9]/g, '')}: {\n\t\tappId: ${
+  const appNameLabel = stringify(app.appName);
+  return `\t${appNameLabel}: {\n\t\tappId: ${
     app.appId
   },\n\t\tfields: {\n\t\t\t${fields.join('\n\t\t\t')}\n\t\t},${
     subTables.length
@@ -533,7 +538,7 @@ const createWebpack: (
   }
 module.exports = {
   entry: {
-    ${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')}: './src/${
+    ${stringify(selectedApp.appName)}: './src/${
     language[0] === 'T' ? 'ts' : 'js'
   }/main.${
     language[0] === 'T' ? (react ? 'tsx' : 'ts') : react ? 'jsx' : 'js'
@@ -747,7 +752,7 @@ const client = new KintoneRestAPIClient();
     const typeFilePath = path.join(libPath, 'types.ts');
     const typeFile = `import { KintoneRecordField } from '@kintone/rest-api-client';
 ${
-  `export type ${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')} = ` +
+  `export type ${stringify(selectedApp.appName)} = ` +
   createType(selectedAppProperties, false)
 }${
       relatedApps.length
@@ -755,7 +760,7 @@ ${
           relatedApps
             .map(
               (app, i) =>
-                `export type ${app.appName.replace(/[^a-zA-Z0-9]/g, '')} = ` +
+                `export type ${stringify(app.appName)} = ` +
                 createType(relatedAppsProperties[i], false)
             )
             .join('\n')
@@ -987,7 +992,7 @@ export const createFieldTypeFile: (
   );
   const typeFile = `import { KintoneRecordField } from '@kintone/rest-api-client';
 ${
-  `export type ${selectedApp.appName.replace(/[^a-zA-Z0-9]/g, '')} = ` +
+  `export type ${stringify(selectedApp.appName)} = ` +
   createType(selectedAppProperties, false)
 }`;
   fs.writeFileSync(pathToFile, typeFile);
